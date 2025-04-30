@@ -7,7 +7,7 @@ import { FreeMode } from 'swiper';
 
 import PlayPause from './PlayPause';
 import { playPause, setActiveSong } from '../redux/features/playerSlice';
-import { useGetTopChartsQuery } from '../redux/services/shazamCore';
+import { useGetTopChartsQuery } from '../redux/services/spotifyApi';
 
 import 'swiper/css';
 import 'swiper/css/free-mode';
@@ -18,16 +18,18 @@ const TopChartCard = ({ song, i, isPlaying, activeSong, handlePauseClick, handle
     <div className="flex-1 flex flex-row justify-between items-center">
       <img className="w-20 h-20 rounded-lg" src={song?.images?.coverart} alt={song?.title} />
       <div className="flex-1 flex flex-col justify-center mx-3">
-        <Link to={`/songs/${song.key}`}>
+        <Link to={`/songs/${song.id}`}>
           <p className="text-xl font-bold text-white">
             {song?.title}
           </p>
         </Link>
-        <Link to={`/artists/${song?.artists[0].adamid}`}>
-          <p className="text-base text-gray-300 mt-1">
-            {song?.subtitle}
-          </p>
-        </Link>
+        {song?.artists && song.artists[0] && (
+          <Link to={`/artists/${song?.artists[0].adamid}`}>
+            <p className="text-base text-gray-300 mt-1">
+              {song?.subtitle}
+            </p>
+          </Link>
+        )}
       </div>
     </div>
     <PlayPause
@@ -50,16 +52,37 @@ const TopPlay = () => {
     divRef.current.scrollIntoView({ behavior: 'smooth' });
   });
 
-  const topPlays = data?.slice(0, 5);
+  // Extract albums from Spotify's new releases response
+  const albums = data?.albums?.items || [];
+  const topPlays = albums.slice(0, 5);
 
   const handlePauseClick = () => {
     dispatch(playPause(false));
   };
 
   const handlePlayClick = (song, i) => {
-    dispatch(setActiveSong({ song, data, i }));
+    dispatch(setActiveSong({ song, data: albums, i }));
     dispatch(playPause(true));
   };
+
+  // Extract unique artists from the albums
+  const uniqueArtists = [];
+  const artistIds = new Set();
+
+  topPlays.forEach(album => {
+    if (album?.artists) {
+      album.artists.forEach(artist => {
+        if (!artistIds.has(artist.id)) {
+          artistIds.add(artist.id);
+          uniqueArtists.push({
+            id: artist.id,
+            name: artist.name,
+            image: album.images[0]?.url
+          });
+        }
+      });
+    }
+  });
 
   return (
     <div ref={divRef} className="xl:ml-6 ml-0 xl:mb-0 mb-6 flex-1 xl:max-w-[500px] max-w-full flex flex-col">
@@ -72,15 +95,21 @@ const TopPlay = () => {
         </div>
 
         <div className="mt-4 flex flex-col gap-1">
-          {topPlays?.map((song, i) => (
+          {topPlays?.map((album, i) => (
             <TopChartCard
-              key={song.key}
-              song={song}
+              key={album.id}
+              song={{
+                id: album.id,
+                title: album.name,
+                images: { coverart: album.images[0]?.url },
+                subtitle: album.artists?.map(artist => artist.name).join(', '),
+                artists: album.artists?.map(artist => ({ adamid: artist.id }))
+              }}
               i={i}
               isPlaying={isPlaying}
               activeSong={activeSong}
               handlePauseClick={handlePauseClick}
-              handlePlayClick={() => handlePlayClick(song, i)}
+              handlePlayClick={() => handlePlayClick(album, i)}
             />
           ))}
         </div>
@@ -103,14 +132,14 @@ const TopPlay = () => {
           modules={[FreeMode]}
           className="mt-4"
         >
-          {topPlays?.slice(0, 5).map((artist) => (
+          {uniqueArtists.slice(0, 5).map((artist) => (
             <SwiperSlide
-              key={artist?.key}
+              key={artist.id}
               style={{ width: '25%', height: 'auto' }}
               className="shadow-lg rounded-full animate-slideright"
             >
-              <Link to={`/artists/${artist?.artists[0].adamid}`}>
-                <img src={artist?.images?.background} alt="Name" className="rounded-full w-full object-cover" />
+              <Link to={`/artists/${artist.id}`}>
+                <img src={artist.image} alt={artist.name} className="rounded-full w-full object-cover" />
               </Link>
             </SwiperSlide>
           ))}

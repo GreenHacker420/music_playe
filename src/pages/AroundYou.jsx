@@ -1,40 +1,45 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
 import { useSelector } from 'react-redux';
 
 import { Error, Loader, SongCard } from '../components';
-import { useGetSongsByCountryQuery } from '../redux/services/shazamCore';
+import { useGetSongsByCountryQuery } from '../redux/services/spotifyApi';
 
 const CountryTracks = () => {
-  const [country, setCountry] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const { activeSong, isPlaying } = useSelector((state) => state.player);
-  const { data, isFetching, error } = useGetSongsByCountryQuery(country);
+  const { data, isFetching, error } = useGetSongsByCountryQuery();
 
+  // We're using global top charts from Spotify since there's no direct country endpoint
   useEffect(() => {
-    axios
-      .get(`https://geo.ipify.org/api/v2/country?apiKey=${import.meta.env.VITE_GEO_API_KEY}`)
-      .then((res) => setCountry(res?.data?.location.country))
-      .catch((err) => console.log(err))
-      .finally(() => setLoading(false));
-  }, [country]);
+    // Set loading to false after component mounts
+    setLoading(false);
+  }, []);
 
-  if (isFetching && loading) return <Loader title="Loading Songs around you..." />;
+  if (isFetching && loading) return <Loader title="Loading Top Tracks..." />;
 
-  if (error && country !== '') return <Error />;
+  if (error) return <Error />;
+
+  // Handle Spotify's new releases data structure
+  const albums = data?.albums?.items || [];
 
   return (
     <div className="flex flex-col">
-      <h2 className="font-bold text-3xl text-white text-left mt-4 mb-10">Around you <span className="font-black">{country}</span></h2>
+      <h2 className="font-bold text-3xl text-white text-left mt-4 mb-10">New Releases</h2>
 
       <div className="flex flex-wrap sm:justify-start justify-center gap-8">
-        {data?.map((song, i) => (
+        {albums.map((album, i) => (
           <SongCard
-            key={song.key}
-            song={song}
+            key={album.id}
+            song={{
+              id: album.id,
+              title: album.name,
+              images: { coverart: album.images[0]?.url },
+              subtitle: album.artists?.map(artist => artist.name).join(', '),
+              artists: album.artists?.map(artist => ({ adamid: artist.id })),
+            }}
             isPlaying={isPlaying}
             activeSong={activeSong}
-            data={data}
+            data={albums}
             i={i}
           />
         ))}
